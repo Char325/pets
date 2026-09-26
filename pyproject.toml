@@ -121,8 +121,10 @@ docstring-code-format = true
 
 [tool.coverage.run]
 source = ["stable_pretraining"]
-omit = ["*/tests/*", "*/test_*"]
+omit = ["*/tests/*", "*/test_*", "stable_pretraining/_version.py"]
 relative_files = true
 
 [tool.coverage.report]
 precision = 2
+# The reporting job has a fresh checkout without this installation-generated file.
+omit = ["stable_pretraining/_version.py"]
