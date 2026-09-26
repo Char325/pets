@@ -118,3 +118,7 @@ convention = "google"
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.coverage.run]
+source = ["stable_pretraining"]
+omit = ["*/tests/*", "*/test_*"]

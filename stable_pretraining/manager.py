@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import hydra
 import lightning
@@ -456,6 +456,56 @@ class _RunDirCallback(Callback):
         )
         logging.error(diagnostic)
         raise RuntimeError(diagnostic)
+
+
+class _RequeueCheckpoint(ModelCheckpoint):
+    """Save the first completed training step as well as the regular schedule."""
+
+    @property
+    def state_key(self) -> str:
+        """Preserve the identity of the previous plain ModelCheckpoint callback."""
+        return "ModelCheckpoint" + super().state_key[len(type(self).__qualname__) :]
+
+    def on_train_start(
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule
+    ) -> None:
+        """Arm the initial save only when the run has no requeue checkpoint."""
+        super().on_train_start(trainer, pl_module)
+        self._initial_global_step = trainer.global_step
+        # file_exists synchronizes rank zero's decision, including for sharded
+        # checkpoints, so every rank participates in the same save operation.
+        self._first_step_pending = not self.file_exists(
+            str(Path(self.dirpath) / "last.ckpt"), trainer
+        )
+
+    def on_train_batch_end(
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        outputs: Any,
+        batch: Any,
+        batch_idx: int,
+    ) -> None:
+        """Save after the first optimizer update and at regular step intervals."""
+        super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
+        if self._first_step_pending and trainer.global_step > self._initial_global_step:
+            self._first_step_pending = False
+            # The regular schedule may already have saved this step. Waiting
+            # for global_step to advance also respects gradient accumulation.
+            if not self._should_skip_saving_checkpoint(trainer):
+                self._save_topk_checkpoint(trainer, self._monitor_candidates(trainer))
+
+    def on_train_epoch_end(
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule
+    ) -> None:
+        """Keep an epoch-end checkpoint regardless of the step interval."""
+        super().on_train_epoch_end(trainer, pl_module)
+        # Lightning makes step and epoch schedules mutually exclusive; the
+        # requeue policy needs an epoch-end save even between step intervals.
+        if self._every_n_train_steps > 0 and not self._should_skip_saving_checkpoint(
+            trainer
+        ):
+            self._save_topk_checkpoint(trainer, self._monitor_candidates(trainer))
 
 
 @catch_errors_class()
@@ -1311,7 +1361,8 @@ class Manager(submitit.helpers.Checkpointable):
         When ``cache_dir`` is active:
         1. Every user ``ModelCheckpoint`` is redirected to
            ``run_dir/checkpoints/`` (preserving filename/monitor/etc.).
-        2. A **requeue checkpoint** (``last.ckpt``, saved every epoch) is
+        2. A **requeue checkpoint** (``last.ckpt``, saved after the first
+           completed training step and every epoch) is
            always added so that SLURM preemption recovery works even if the
            user's callbacks only save "best" models.
         """
@@ -1371,9 +1422,9 @@ class Manager(submitit.helpers.Checkpointable):
             # ``every_n_train_steps`` (when > 0) also saves ``last.ckpt``
             # mid-epoch, so a heavily-preempted (spot) run whose epoch never
             # finishes before preemption still has a checkpoint to resume from.
-            # 0 keeps the epoch-end-only behavior.
+            # 0 keeps just the first-step and epoch-end saves.
             every_n_steps = cfg.requeue_checkpoint_every_n_steps or None
-            requeue_saver = ModelCheckpoint(
+            requeue_saver = _RequeueCheckpoint(
                 dirpath=str(save_dir),
                 filename="last",
                 save_last=False,
@@ -1384,7 +1435,7 @@ class Manager(submitit.helpers.Checkpointable):
             )
             self._trainer.callbacks.append(requeue_saver)
             logging.info(
-                "  Added requeue checkpoint (filename='last', "
+                "  Added requeue checkpoint (filename='last', first step + epoch end, "
                 f"every_n_train_steps={every_n_steps})"
             )
         elif "SLURM_JOB_ID" in os.environ:
