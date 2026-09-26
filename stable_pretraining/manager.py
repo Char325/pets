@@ -652,6 +652,9 @@ class Manager(submitit.helpers.Checkpointable):
             )
             return
 
+        if not isinstance(resume_info, dict):
+            logging.warning(f"! {sidecar} must contain a JSON object — skipping resume")
+            return
         run_id = resume_info.get("id")
         if not run_id:
             logging.warning("! wandb_resume.json has no 'id' — skipping")
@@ -727,6 +730,9 @@ class Manager(submitit.helpers.Checkpointable):
             )
             return
 
+        if not isinstance(resume_info, dict):
+            logging.warning(f"! {sidecar} must contain a JSON object — skipping resume")
+            return
         run_name = resume_info.get("name")
         if not run_name:
             logging.warning("! trackio_resume.json has no 'name' — skipping")
@@ -790,6 +796,9 @@ class Manager(submitit.helpers.Checkpointable):
             )
             return
 
+        if not isinstance(resume_info, dict):
+            logging.warning(f"! {sidecar} must contain a JSON object — skipping resume")
+            return
         run_id = resume_info.get("id")
         if not run_id:
             logging.warning("! swanlab_resume.json has no 'id' — skipping")
@@ -1707,6 +1716,8 @@ class Manager(submitit.helpers.Checkpointable):
 
         if exp.offline:
             previous_run = self._wandb_previous_dir(wandb_logger)
+            if previous_run is None:
+                return
             logging.info(f"  Found a previous run ({previous_run}), reusing config")
             with open(previous_run / "files/wandb-config.json", "r") as f:
                 last_config = json.load(f)
@@ -1739,6 +1750,8 @@ class Manager(submitit.helpers.Checkpointable):
         Returns:
             pl.LightningModule: The instantiated module ready for training.
         """
+        if hasattr(self, "_instantiated_module"):
+            return self._instantiated_module
         if not isinstance(self.module, pl.LightningModule):
             logging.info("  instantiating pl_module...")
             # with self._trainer.init_module():
@@ -1762,6 +1775,8 @@ class Manager(submitit.helpers.Checkpointable):
         Returns:
             pl.LightningDataModule: The instantiated data module ready for use.
         """
+        if hasattr(self, "_instantiated_data"):
+            return self._instantiated_data
         if not isinstance(self.data, pl.LightningDataModule):
             self._instantiated_data = hydra.utils.instantiate(
                 self.data, _convert_="object", _recursive_=False
@@ -2445,6 +2460,7 @@ class Manager(submitit.helpers.Checkpointable):
             raise ValueError(
                 f"`module` must be a dict, DictConfig or pl.LightningModule, not {type(module)}"
             )
+        self.__dict__.pop("_instantiated_module", None)
 
     def _register_data(self, data):
         if type(data) is dict:
@@ -2459,3 +2475,4 @@ class Manager(submitit.helpers.Checkpointable):
             raise ValueError(
                 f"`data` must be a dict, DictConfig or pl.LightningDataModule, not {type(data)}"
             )
+        self.__dict__.pop("_instantiated_data", None)

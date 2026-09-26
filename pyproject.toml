@@ -122,3 +122,7 @@ docstring-code-format = true
 [tool.coverage.run]
 source = ["stable_pretraining"]
 omit = ["*/tests/*", "*/test_*"]
+relative_files = true
+
+[tool.coverage.report]
+precision = 2

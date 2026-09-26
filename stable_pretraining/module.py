@@ -435,7 +435,9 @@ class Module(pl.LightningModule):
             return None
         # Lazily move to the model's device so users don't have to .cuda() it.
         if isinstance(gt, torch.nn.Module):
-            ref = next(gt.parameters(), None) or next(gt.buffers(), None)
+            ref = next(gt.parameters(), None)
+            if ref is None:
+                ref = next(gt.buffers(), None)
             if ref is None or ref.device != self.device:
                 gt.to(self.device)
         return gt
@@ -975,6 +977,11 @@ class Module(pl.LightningModule):
             logging.info("  Using user's partial optimizer.")
             self.optim = dict(optimizer=self.optim)
 
+        if not isinstance(self.optim, (dict, DictConfig)):
+            raise ValueError(
+                "Optimizer must be either a partial function or a dict of optimizer configs"
+            )
+
         # Single optimizer case
         optimizer_cfg = self.optim.get("optimizer")
         if isinstance(optimizer_cfg, (str, dict, DictConfig)) or hasattr(
@@ -1008,11 +1015,6 @@ class Module(pl.LightningModule):
             return [opt], [scheduler_dict]
 
         # Multiple optimizers case - check once
-        if not isinstance(self.optim, (dict, DictConfig)):
-            raise ValueError(
-                "Optimizer must be either a partial function or a dict of optimizer configs"
-            )
-
         # Verify all values are dicts
         optim_items = list(self.optim.items())
         if not all(isinstance(v, (dict, DictConfig)) for _, v in optim_items):

@@ -3,6 +3,7 @@
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://galilai-group.github.io/stable-pretraining/)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://github.com/galilai-group/stable-pretraining/tree/main/benchmarks)
 [![Test Status](https://github.com/galilai-group/stable-pretraining/actions/workflows/testing.yml/badge.svg)](https://github.com/galilai-group/stable-pretraining/actions/workflows/testing.yml)
+[![Coverage](https://codecov.io/gh/galilai-group/stable-pretraining/branch/main/graph/badge.svg)](https://app.codecov.io/gh/galilai-group/stable-pretraining)
 [![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
 [![JAX](https://img.shields.io/badge/JAX-experimental-9cf?logo=google&logoColor=white)](#jax-backend)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
