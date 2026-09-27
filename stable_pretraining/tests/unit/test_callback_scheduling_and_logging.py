@@ -32,14 +32,17 @@ def test_teacher_updates_at_exact_frequency_without_repeating_accumulation_steps
 ):
     wrapper = _Teacher()
     model = nn.Sequential(wrapper)
-    trainer = SimpleNamespace(global_step=0, current_epoch=2, max_epochs=10)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    trainer = SimpleNamespace(
+        global_step=0, current_epoch=2, max_epochs=10, optimizers=[optimizer]
+    )
     cb = TeacherStudentCallback(frequency, after_backward, verbose=False)
     cb.on_fit_start(trainer, model)
     cb.on_train_batch_end(trainer, model, {}, {}, 0)
     assert wrapper.update_teacher.call_count == 0
     for step in range(1, 7):
+        cb.on_before_optimizer_step(trainer, model, optimizer)
         trainer.global_step = step
-        cb.on_after_backward(trainer, model)
         cb.on_train_batch_end(trainer, model, {}, {}, step)
         cb.on_train_batch_end(trainer, model, {}, {}, step)
         assert wrapper.update_teacher.call_count == step // frequency

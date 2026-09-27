@@ -483,6 +483,10 @@ class Module(pl.LightningModule):
             raise ValueError(msg)
         batch["batch_idx"] = batch_idx
         state = self(batch, stage="fit")
+        if not isinstance(state, dict):
+            raise ValueError(
+                f"forward(batch, stage='fit') must return a dict, got {type(state).__name__}"
+            )
 
         # Resolve optimizers and schedulers (can be single or list)
         optimizers = self.optimizers()
@@ -507,6 +511,19 @@ class Module(pl.LightningModule):
             )
         elif len(optimizers) == 1 and len(schedulers) == 0:
             schedulers = [None]
+
+        loss = state.get("loss")
+        if not isinstance(loss, torch.Tensor) or loss.numel() != 1:
+            description = (
+                f"Tensor with shape {tuple(loss.shape)}"
+                if isinstance(loss, torch.Tensor)
+                else type(loss).__name__
+            )
+            raise ValueError(
+                "forward(batch, stage='fit') must return a dict containing a "
+                f"scalar Tensor 'loss' when optimizers are configured; got {description}. "
+                f"Available output keys: {list(state)}"
+            )
 
         # Compute gradients once for the joint loss
         self.manual_backward(state["loss"])
